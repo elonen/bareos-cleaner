@@ -52,12 +52,12 @@ del_empty() {
 	BACULA_BATCH="$(mktemp)"
 	
 	echo ""
-	echo "deleting all empty jobs..."
+	echo "deleting all empty T/f status jobs..."
 	echo ""
 	
 	while read jid; do
 	  echo "delete jobid=$jid" >> $BACULA_BATCH;
-	done < <(echo "select jobid from Job where JobBytes=0 and JobFiles=0 and JobStatus<>'C' and JobStatus<>'R';" | mysql --batch --skip-column-names bareos)
+	done < <(echo "select jobid from Job where JobBytes=0 and JobFiles=0 and (JobStatus='T' or JobStatus='f' or JobStatus='A' or JobStatus='E');" | mysql --batch --skip-column-names bareos)
 	
 	bconsole < $BACULA_BATCH 
 	rm -f $BACULA_BATCH
@@ -146,7 +146,7 @@ delete_purged_volumes() {
         echo "searching for all purged volumes to be deleted..."
         echo ""
 
-        PURGED_VOLUMES=`echo "list volumes" | bconsole | grep "Purged" | awk {'print $4'}`
+        PURGED_VOLUMES=`echo "list volumes" | bconsole | grep "Purged.*File" | awk {'print $4'}`
         echo "$PURGED_VOLUMES"
 
         echo ""
