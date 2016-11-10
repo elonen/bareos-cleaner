@@ -108,6 +108,8 @@ delete_obsolete_volumes() {
 
         cd "$POOLDIR"
         for i in *; do
+            [ "$i" = "lost+found" ] && continue
+
             echo "list volume=$i" | bconsole | if grep --quiet "No results to list"; then
                 echo "$i is ready to be deleted"  
                 echo "$POOLDIR/$i" >> $VOLUMES_TO_DELETE
