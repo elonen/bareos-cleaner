@@ -25,7 +25,7 @@ Current commands:
     -h
        print this screen
        
-USAGE: 
+## USAGE: 
  
-export BAREOS_POOLDIR=/mnt/bareos
-bareos-cleanup -e
+    export BAREOS_POOLDIR=/mnt/bareos
+    bareos-cleanup -e
