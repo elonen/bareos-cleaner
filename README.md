@@ -24,3 +24,8 @@ Current commands:
        delete all purged volumes from Bacula catalog
     -h
        print this screen
+       
+USAGE: 
+ 
+export BAREOS_POOLDIR=/mnt/bareos
+bareos-cleanup -e
