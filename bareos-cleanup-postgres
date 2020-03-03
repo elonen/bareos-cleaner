@@ -1,8 +1,14 @@
 #!/bin/bash
 
+set -e
+
+pg_query(){
+  su - postgres -c "psql --quiet --tuples-only --dbname bareos -c \"$1\""
+}
+
 POOLDIR="$BAREOS_POOLDIR"
 if [ -z "$POOLDIR" ]; then
-  POOLDIR="/mnt/raid/backup/bareos/storage"
+  POOLDIR="/backups"
 fi
 
 function print_usage() {
@@ -20,7 +26,7 @@ function print_usage() {
         echo "     delete obsolete volume files from the disk (those not listed in catalog)"
         echo "       NOTE: this operation can take several minutes to complete"
         echo "  -Dp";
-        echo "     delete all purged volumes from Bacula catalog"
+        echo "     delete all purged volumes from Bareos catalog"
         echo "  -h";
         echo "     print this screen";
         echo ""
@@ -50,32 +56,43 @@ update_volume() {
 
 del_empty() {
 	BACULA_BATCH="$(mktemp)"
+        SQL="select jobid from Job where JobBytes=0 and JobFiles=0 and (JobStatus='T' or JobStatus='f' or JobStatus='A' or JobStatus='E');"
 	
 	echo ""
 	echo "deleting all empty T/f status jobs..."
 	echo ""
-	
+
 	while read jid; do
+          if [ "${jid}x" = "x" ]; then
+            continue
+	  fi
 	  echo "delete jobid=$jid" >> $BACULA_BATCH;
-	done < <(echo "select jobid from Job where JobBytes=0 and JobFiles=0 and (JobStatus='T' or JobStatus='f' or JobStatus='A' or JobStatus='E');" | mysql --batch --skip-column-names bareos)
+	done < <(pg_query "$SQL")
 	
-	bconsole < $BACULA_BATCH 
+	[ -s $BACULA_BATCH ] || echo "no empty T/f jobs founded." && rm -rf $BACULA_BATCH && exit
+	bconsole < $BACULA_BATCH
 	rm -f $BACULA_BATCH
 }
 
 del_copied_jobs() {
 	BACULA_BATCH="$(mktemp)"
+	LIST_SQL="SELECT DISTINCT Job.PriorJobId AS JobId, Job.Job, Job.JobId AS CopyJobId, Media.MediaType FROM Job JOIN JobMedia USING (JobId) JOIN Media USING (MediaId) WHERE Job.Type = 'C' ORDER BY Job.PriorJobId DESC;"
+	DELETE_SQL="SELECT DISTINCT Job.PriorJobId AS JobId FROM Job JOIN JobMedia USING (JobId) JOIN Media USING (MediaId) WHERE Job.Type = 'C' ORDER BY Job.PriorJobId DESC;"
 	
 	echo ""
-	echo "SELECT DISTINCT Job.PriorJobId AS JobId, Job.Job, Job.JobId AS CopyJobId, Media.MediaType FROM Job JOIN JobMedia USING (JobId) JOIN Media USING (MediaId) WHERE Job.Type = 'C' ORDER BY Job.PriorJobId DESC;" | mysql -t bareos
+	pg_query "$LIST_SQL"
         echo ""
         echo "This will delete jobs from the first column above."
         echo -n "Are you sure ? (yes|no): "
         read response
         if [ "$response" = "yes" ]; then
           while read jid; do
+	    if [ "${jid}x" = "x" ]; then
+              continue
+            fi
             echo "delete jobid=$jid" >> $BACULA_BATCH;
-          done < <(echo "SELECT DISTINCT Job.PriorJobId AS JobId FROM Job JOIN JobMedia USING (JobId) JOIN Media USING (MediaId) WHERE Job.Type = 'C' ORDER BY Job.PriorJobId DESC;" | mysql --batch --skip-column-names bareos)
+          done < <(pg_query "$DELETE_SQL")
+	  [ -s $BACULA_BATCH ] || echo "no copied jobs founded." && rm -rf $BACULA_BATCH && exit
           bconsole <  $BACULA_BATCH
         fi
         rm -f $BACULA_BATCH
